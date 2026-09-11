@@ -18,3 +18,5 @@ services:
         sync: false
       - key: META_GRAPH_VERSION
         value: v24.0
+      - key: TELEGRAM_BOT_USERNAME
+        value: anastasia_lfk_massage_bot

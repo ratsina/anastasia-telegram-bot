@@ -9,6 +9,7 @@ import {
   INSTAGRAM_REPLY_TEXT,
   INSTAGRAM_TYPO_CONFIRMATION_TEXT,
   INSTAGRAM_TYPO_QUICK_REPLIES,
+  TELEGRAM_COMPLEX_URL,
   classifyInstagramKeyword,
   createInstagramSender,
   createInstagramWebhookServer,
@@ -33,6 +34,16 @@ test("normalizes all supported keyword spellings", () => {
   assert.equal(normalizeInstagramKeyword("д в и ж е н и е"), "движение");
   assert.equal(normalizeInstagramKeyword("движение!"), "движение");
   assert.equal(normalizeInstagramKeyword("ДВИЖЕНИЕ!!! 🙌🤍"), "движение");
+});
+
+test("sends users to the Telegram complex flow", () => {
+  assert.equal(
+    TELEGRAM_COMPLEX_URL,
+    "https://t.me/anastasia_lfk_massage_bot?start=complex_instagram",
+  );
+  assert.match(INSTAGRAM_REPLY_TEXT, /получить комплекс №1/);
+  assert.ok(INSTAGRAM_REPLY_TEXT.includes(TELEGRAM_COMPLEX_URL));
+  assert.equal(INSTAGRAM_REPLY_TEXT.includes("[ССЫЛКА НА КОМПЛЕКС №1]"), false);
 });
 
 test("classifies only the exact keyword and one-edit typos", () => {

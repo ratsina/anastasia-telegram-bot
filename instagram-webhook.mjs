@@ -13,14 +13,18 @@ const MAX_REMEMBERED_MESSAGE_IDS = 5000;
 const INSTAGRAM_KEYWORD = "движение";
 const INSTAGRAM_CONFIRM_COMPLEX_PAYLOAD = "instagram_complex_confirm_yes";
 const INSTAGRAM_DECLINE_COMPLEX_PAYLOAD = "instagram_complex_confirm_no";
+const TELEGRAM_BOT_USERNAME = (
+  process.env.TELEGRAM_BOT_USERNAME?.trim() || "anastasia_lfk_massage_bot"
+).replace(/^@/, "");
+const TELEGRAM_COMPLEX_URL = `https://t.me/${encodeURIComponent(TELEGRAM_BOT_USERNAME)}?start=complex_instagram`;
 
 const INSTAGRAM_REPLY_TEXT = [
   "Привет! 🙌",
   "Вы пришли за комплексом упражнений.",
   "",
-  "Держите 🤍",
+  "Нажмите на ссылку, чтобы получить комплекс №1 и продолжить в Telegram:",
   "",
-  "[ССЫЛКА НА КОМПЛЕКС №1]",
+  TELEGRAM_COMPLEX_URL,
 ].join("\n");
 
 const INSTAGRAM_TYPO_CONFIRMATION_TEXT =
@@ -500,6 +504,7 @@ export {
   INSTAGRAM_REPLY_TEXT,
   INSTAGRAM_TYPO_CONFIRMATION_TEXT,
   INSTAGRAM_TYPO_QUICK_REPLIES,
+  TELEGRAM_COMPLEX_URL,
   classifyInstagramKeyword,
   createInstagramSender,
   createInstagramWebhookServer,
