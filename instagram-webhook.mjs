@@ -16,7 +16,7 @@ const INSTAGRAM_DECLINE_COMPLEX_PAYLOAD = "instagram_complex_confirm_no";
 
 const INSTAGRAM_REPLY_TEXT = [
   "Привет! 🙌",
-  "Вы пришли за обещанным комплексом упражнений для шеи.",
+  "Вы пришли за комплексом упражнений.",
   "",
   "Держите 🤍",
   "",
@@ -24,7 +24,7 @@ const INSTAGRAM_REPLY_TEXT = [
 ].join("\n");
 
 const INSTAGRAM_TYPO_CONFIRMATION_TEXT =
-  "Кажется, вы имели в виду кодовое слово ДВИЖЕНИЕ 😊 Хотите получить бесплатный комплекс упражнений для шеи?";
+  "Кажется, вы имели в виду кодовое слово ДВИЖЕНИЕ 😊 Хотите получить бесплатный комплекс упражнений?";
 
 const INSTAGRAM_TYPO_QUICK_REPLIES = [
   {
