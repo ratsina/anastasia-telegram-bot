@@ -7,7 +7,8 @@
     "start": "node instagram-webhook.mjs",
     "start:instagram": "node instagram-webhook.mjs",
     "start:telegram": "node bot.mjs",
-    "test": "node --test bot.test.mjs instagram-webhook.test.mjs"
+    "instagram:account-id": "node tools/instagram-account-id.mjs",
+    "test": "node --test bot.test.mjs instagram-webhook.test.mjs instagram-account-id.test.mjs"
   },
   "engines": {
     "node": ">=20"

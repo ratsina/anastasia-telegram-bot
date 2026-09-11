@@ -69,3 +69,9 @@
 ```
 
 Для Meta используется callback path `/webhook`, а для проверки доступности — `/health`. Сервер проверяет `X-Hub-Signature-256`, не отвечает на собственные echo-сообщения и не выводит секреты в журнал. Подробная инструкция находится в `docs/instagram-direct.md`.
+
+Для развёртывания на Render используйте готовый `render.yaml` или точные значения полей из `docs/render-deploy.md`. ID профессионального Instagram-аккаунта можно получить без вывода токена командой:
+
+```powershell
+npm run instagram:account-id
+```

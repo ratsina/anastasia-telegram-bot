@@ -7,6 +7,7 @@ import {
   INSTAGRAM_REPLY_TEXT,
   createInstagramSender,
   createInstagramWebhookServer,
+  instagramConfigFromEnv,
   normalizeInstagramKeyword,
   processInstagramWebhookPayload,
   verifyMetaSignature,
@@ -60,6 +61,32 @@ test("verifies GET webhook requests and rejects an incorrect token", async (t) =
   validUrl.searchParams.set("hub.verify_token", "incorrect");
   const invalid = await fetch(validUrl);
   assert.equal(invalid.status, 403);
+});
+
+test("serves the Render health check endpoint", async (t) => {
+  const server = createInstagramWebhookServer({
+    config: TEST_CONFIG,
+    logger: quietLogger(),
+    sendMessage: async () => {},
+  });
+  const baseUrl = await listen(server);
+  t.after(() => server.close());
+
+  const response = await fetch(`${baseUrl}/health`);
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { ok: true, service: "instagram-webhook" });
+});
+
+test("reads the listening port from Render's PORT environment variable", () => {
+  const previousPort = process.env.PORT;
+  process.env.PORT = "43210";
+
+  try {
+    assert.equal(instagramConfigFromEnv().port, 43210);
+  } finally {
+    if (previousPort === undefined) delete process.env.PORT;
+    else process.env.PORT = previousPort;
+  }
 });
 
 test("accepts a signed POST webhook and rejects an invalid signature", async (t) => {

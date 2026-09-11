@@ -38,11 +38,19 @@ PORT=3001
 npm start
 ```
 
+Пошаговая настройка Render находится в [`render-deploy.md`](render-deploy.md). Готовый `render.yaml` создаёт Node.js Web Service с проверкой `/health`.
+
 Сервис слушает `0.0.0.0:$PORT` и предоставляет:
 
 - `GET /health` — проверка работоспособности;
 - `GET /webhook` — подтверждение webhook Meta;
 - `POST /webhook` — события Instagram Direct.
+
+Чтобы безопасно получить ID подключённого профессионального аккаунта из токена в `.env`, выполните:
+
+```powershell
+npm run instagram:account-id
+```
 
 Для локальной проверки запустите сервер, затем во втором окне выполните:
 
