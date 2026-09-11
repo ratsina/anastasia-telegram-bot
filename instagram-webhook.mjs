@@ -10,6 +10,9 @@ loadEnvFile(join(appDirectory, ".env"));
 const DEFAULT_GRAPH_VERSION = "v24.0";
 const MAX_WEBHOOK_BYTES = 1024 * 1024;
 const MAX_REMEMBERED_MESSAGE_IDS = 5000;
+const INSTAGRAM_KEYWORD = "движение";
+const INSTAGRAM_CONFIRM_COMPLEX_PAYLOAD = "instagram_complex_confirm_yes";
+const INSTAGRAM_DECLINE_COMPLEX_PAYLOAD = "instagram_complex_confirm_no";
 
 const INSTAGRAM_REPLY_TEXT = [
   "Привет! 🙌",
@@ -19,6 +22,22 @@ const INSTAGRAM_REPLY_TEXT = [
   "",
   "[ССЫЛКА НА КОМПЛЕКС №1]",
 ].join("\n");
+
+const INSTAGRAM_TYPO_CONFIRMATION_TEXT =
+  "Кажется, вы имели в виду кодовое слово ДВИЖЕНИЕ 😊 Хотите получить бесплатный комплекс упражнений для шеи?";
+
+const INSTAGRAM_TYPO_QUICK_REPLIES = [
+  {
+    content_type: "text",
+    title: "✅ Получить комплекс",
+    payload: INSTAGRAM_CONFIRM_COMPLEX_PAYLOAD,
+  },
+  {
+    content_type: "text",
+    title: "Нет",
+    payload: INSTAGRAM_DECLINE_COMPLEX_PAYLOAD,
+  },
+];
 
 if (isDirectRun()) {
   await main();
@@ -208,12 +227,26 @@ async function processInstagramWebhookPayload(
         continue;
       }
 
-      const keywordMatch = normalizeInstagramKeyword(message.text) === "движение";
+      const quickReplyPayload = String(message?.quick_reply?.payload ?? "");
+
+      if (quickReplyPayload === INSTAGRAM_DECLINE_COMPLEX_PAYLOAD) {
+        rememberMessageId(processedMessageIds, messageId);
+        result.ignored += 1;
+        logger.info(
+          `[instagram-webhook] quick reply handled action=decline id=${maskIdentifier(messageId)} sender=${maskIdentifier(senderId)}`,
+        );
+        continue;
+      }
+
+      const keywordMatch = classifyInstagramKeyword(message.text);
       logger.info(
         `[instagram-webhook] incoming message id=${maskIdentifier(messageId)} sender=${maskIdentifier(senderId)} text_length=${message.text.length} keyword_match=${keywordMatch}`,
       );
 
-      if (!keywordMatch) {
+      const confirmedByQuickReply =
+        quickReplyPayload === INSTAGRAM_CONFIRM_COMPLEX_PAYLOAD;
+
+      if (!confirmedByQuickReply && keywordMatch === "none") {
         result.ignored += 1;
         continue;
       }
@@ -221,10 +254,16 @@ async function processInstagramWebhookPayload(
       rememberMessageId(processedMessageIds, messageId);
 
       try {
-        await sendMessage(senderId, INSTAGRAM_REPLY_TEXT);
+        if (keywordMatch === "typo" && !confirmedByQuickReply) {
+          await sendMessage(senderId, INSTAGRAM_TYPO_CONFIRMATION_TEXT, {
+            quickReplies: INSTAGRAM_TYPO_QUICK_REPLIES,
+          });
+        } else {
+          await sendMessage(senderId, INSTAGRAM_REPLY_TEXT);
+        }
         result.replied += 1;
         logger.info(
-          `[instagram-webhook] automatic reply sent recipient=${maskIdentifier(senderId)} source_message=${maskIdentifier(messageId)}`,
+          `[instagram-webhook] automatic reply sent recipient=${maskIdentifier(senderId)} source_message=${maskIdentifier(messageId)} action=${keywordMatch === "typo" && !confirmedByQuickReply ? "confirm_typo" : "send_complex"}`,
         );
       } catch (error) {
         if (messageId) processedMessageIds.delete(messageId);
@@ -239,11 +278,14 @@ async function processInstagramWebhookPayload(
 }
 
 function createInstagramSender(config, fetchImpl = globalThis.fetch) {
-  return async (recipientId, text) => {
+  return async (recipientId, text, { quickReplies = [] } = {}) => {
     const graphVersion = /^v\d+\.\d+$/.test(config.graphVersion)
       ? config.graphVersion
       : DEFAULT_GRAPH_VERSION;
     const endpoint = `https://graph.instagram.com/${graphVersion}/${encodeURIComponent(config.accountId)}/messages`;
+    const message = { text };
+    if (quickReplies.length) message.quick_replies = quickReplies;
+
     const response = await fetchImpl(endpoint, {
       method: "POST",
       headers: {
@@ -252,7 +294,7 @@ function createInstagramSender(config, fetchImpl = globalThis.fetch) {
       },
       body: JSON.stringify({
         recipient: { id: recipientId },
-        message: { text },
+        message,
       }),
       signal: AbortSignal.timeout(15000),
     });
@@ -288,7 +330,54 @@ function verifyMetaSignature(rawBody, signatureHeader, appSecret) {
 }
 
 function normalizeInstagramKeyword(text) {
-  return String(text).normalize("NFKC").replace(/\s+/g, "").toLocaleLowerCase("ru-RU");
+  return String(text)
+    .normalize("NFKC")
+    .toLocaleLowerCase("ru-RU")
+    .replace(/\s+/gu, "")
+    .replace(/[^\p{L}\p{N}]+$/gu, "");
+}
+
+function classifyInstagramKeyword(text) {
+  const normalized = normalizeInstagramKeyword(text);
+  if (normalized === INSTAGRAM_KEYWORD) return "exact";
+  return isWithinOneEdit(normalized, INSTAGRAM_KEYWORD) ? "typo" : "none";
+}
+
+function isWithinOneEdit(left, right) {
+  if (!left || Math.abs(left.length - right.length) > 1) return false;
+
+  const rows = Array.from({ length: left.length + 1 }, () =>
+    Array(right.length + 1).fill(0),
+  );
+
+  for (let index = 0; index <= left.length; index += 1) rows[index][0] = index;
+  for (let index = 0; index <= right.length; index += 1) rows[0][index] = index;
+
+  for (let leftIndex = 1; leftIndex <= left.length; leftIndex += 1) {
+    for (let rightIndex = 1; rightIndex <= right.length; rightIndex += 1) {
+      const substitutionCost =
+        left[leftIndex - 1] === right[rightIndex - 1] ? 0 : 1;
+      rows[leftIndex][rightIndex] = Math.min(
+        rows[leftIndex - 1][rightIndex] + 1,
+        rows[leftIndex][rightIndex - 1] + 1,
+        rows[leftIndex - 1][rightIndex - 1] + substitutionCost,
+      );
+
+      if (
+        leftIndex > 1 &&
+        rightIndex > 1 &&
+        left[leftIndex - 1] === right[rightIndex - 2] &&
+        left[leftIndex - 2] === right[rightIndex - 1]
+      ) {
+        rows[leftIndex][rightIndex] = Math.min(
+          rows[leftIndex][rightIndex],
+          rows[leftIndex - 2][rightIndex - 2] + 1,
+        );
+      }
+    }
+  }
+
+  return rows[left.length][right.length] === 1;
 }
 
 function instagramConfigFromEnv() {
@@ -406,7 +495,12 @@ function isDirectRun() {
 }
 
 export {
+  INSTAGRAM_CONFIRM_COMPLEX_PAYLOAD,
+  INSTAGRAM_DECLINE_COMPLEX_PAYLOAD,
   INSTAGRAM_REPLY_TEXT,
+  INSTAGRAM_TYPO_CONFIRMATION_TEXT,
+  INSTAGRAM_TYPO_QUICK_REPLIES,
+  classifyInstagramKeyword,
   createInstagramSender,
   createInstagramWebhookServer,
   instagramConfigFromEnv,

@@ -4,7 +4,12 @@ import { createHmac } from "node:crypto";
 import { once } from "node:events";
 
 import {
+  INSTAGRAM_CONFIRM_COMPLEX_PAYLOAD,
+  INSTAGRAM_DECLINE_COMPLEX_PAYLOAD,
   INSTAGRAM_REPLY_TEXT,
+  INSTAGRAM_TYPO_CONFIRMATION_TEXT,
+  INSTAGRAM_TYPO_QUICK_REPLIES,
+  classifyInstagramKeyword,
   createInstagramSender,
   createInstagramWebhookServer,
   instagramConfigFromEnv,
@@ -26,7 +31,34 @@ test("normalizes all supported keyword spellings", () => {
   assert.equal(normalizeInstagramKeyword("ДВИЖЕНИЕ"), "движение");
   assert.equal(normalizeInstagramKeyword("  Движение  "), "движение");
   assert.equal(normalizeInstagramKeyword("д в и ж е н и е"), "движение");
-  assert.equal(normalizeInstagramKeyword("движение!"), "движение!");
+  assert.equal(normalizeInstagramKeyword("движение!"), "движение");
+  assert.equal(normalizeInstagramKeyword("ДВИЖЕНИЕ!!! 🙌🤍"), "движение");
+});
+
+test("classifies only the exact keyword and one-edit typos", () => {
+  for (const text of [
+    "ДВИЖЕНИЕ",
+    "Движение",
+    "д в и ж е н и е",
+    " движение... 😊 ",
+  ]) {
+    assert.equal(classifyInstagramKeyword(text), "exact", text);
+  }
+
+  for (const text of ["движене", "движениее", "движенеи"]) {
+    assert.equal(classifyInstagramKeyword(text), "typo", text);
+  }
+
+  for (const text of [
+    "Здравствуйте",
+    "Хочу записаться на массаж",
+    "Сколько стоит ЛФК?",
+    "НЕ ДВИЖЕНИЕ",
+    "это не движение",
+    "хочу узнать про массаж",
+  ]) {
+    assert.equal(classifyInstagramKeyword(text), "none", text);
+  }
 });
 
 test("verifies webhook signatures against the raw request body", () => {
@@ -168,6 +200,69 @@ test("matches keyword variants, ignores echoes and deduplicates message IDs", as
   assert.equal(logs.join("\n").includes(TEST_CONFIG.accessToken), false);
 });
 
+test("stays silent for ordinary Direct messages", async () => {
+  const sent = [];
+  const texts = [
+    "Здравствуйте",
+    "Хочу записаться на массаж",
+    "Сколько стоит ЛФК?",
+    "НЕ ДВИЖЕНИЕ",
+    "это не движение",
+    "хочу узнать про массаж",
+  ];
+  const payload = instagramPayload(
+    texts.map((text, index) =>
+      incomingMessage({ mid: `silent-${index}`, senderId: "2001", text }),
+    ),
+  );
+
+  const result = await processInstagramWebhookPayload(payload, {
+    accountId: TEST_CONFIG.accountId,
+    logger: quietLogger(),
+    sendMessage: async (...args) => sent.push(args),
+  });
+
+  assert.deepEqual(result, { received: texts.length, replied: 0, ignored: texts.length });
+  assert.deepEqual(sent, []);
+});
+
+test("asks for confirmation on a close typo and handles both quick replies", async () => {
+  const sent = [];
+  const processedMessageIds = new Set();
+  const payload = instagramPayload([
+    incomingMessage({ mid: "typo-1", senderId: "3001", text: "движенеи 😊" }),
+    incomingMessage({
+      mid: "yes-1",
+      senderId: "3001",
+      text: "✅ Получить комплекс",
+      quickReplyPayload: INSTAGRAM_CONFIRM_COMPLEX_PAYLOAD,
+    }),
+    incomingMessage({
+      mid: "no-1",
+      senderId: "3002",
+      text: "Нет",
+      quickReplyPayload: INSTAGRAM_DECLINE_COMPLEX_PAYLOAD,
+    }),
+  ]);
+
+  const result = await processInstagramWebhookPayload(payload, {
+    accountId: TEST_CONFIG.accountId,
+    logger: quietLogger(),
+    processedMessageIds,
+    sendMessage: async (...args) => sent.push(args),
+  });
+
+  assert.deepEqual(result, { received: 3, replied: 2, ignored: 1 });
+  assert.deepEqual(sent, [
+    [
+      "3001",
+      INSTAGRAM_TYPO_CONFIRMATION_TEXT,
+      { quickReplies: INSTAGRAM_TYPO_QUICK_REPLIES },
+    ],
+    ["3001", INSTAGRAM_REPLY_TEXT],
+  ]);
+});
+
 test("sends text through the Instagram Graph messages endpoint", async () => {
   let request;
   const sender = createInstagramSender(TEST_CONFIG, async (url, options) => {
@@ -192,6 +287,35 @@ test("sends text through the Instagram Graph messages endpoint", async () => {
   });
 });
 
+test("sends Instagram quick replies without exposing configuration", async () => {
+  let request;
+  const sender = createInstagramSender(TEST_CONFIG, async (url, options) => {
+    request = { url, options };
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ recipient_id: "9001", message_id: "sent-2" }),
+    };
+  });
+
+  await sender("9001", INSTAGRAM_TYPO_CONFIRMATION_TEXT, {
+    quickReplies: INSTAGRAM_TYPO_QUICK_REPLIES,
+  });
+
+  assert.deepEqual(JSON.parse(request.options.body), {
+    recipient: { id: "9001" },
+    message: {
+      text: INSTAGRAM_TYPO_CONFIRMATION_TEXT,
+      quick_replies: INSTAGRAM_TYPO_QUICK_REPLIES,
+    },
+  });
+  assert.ok(
+    INSTAGRAM_TYPO_QUICK_REPLIES.every(
+      ({ title }) => Array.from(title).length <= 20,
+    ),
+  );
+});
+
 function instagramPayload(messaging) {
   return {
     object: "instagram",
@@ -205,12 +329,25 @@ function instagramPayload(messaging) {
   };
 }
 
-function incomingMessage({ mid, senderId, text, isEcho = false }) {
+function incomingMessage({
+  mid,
+  senderId,
+  text,
+  isEcho = false,
+  quickReplyPayload,
+}) {
   return {
     sender: { id: senderId },
     recipient: { id: TEST_CONFIG.accountId },
     timestamp: Date.now(),
-    message: { mid, text, is_echo: isEcho },
+    message: {
+      mid,
+      text,
+      is_echo: isEcho,
+      ...(quickReplyPayload
+        ? { quick_reply: { payload: quickReplyPayload } }
+        : {}),
+    },
   };
 }
 
