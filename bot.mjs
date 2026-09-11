@@ -166,8 +166,12 @@ async function handleMessage(message) {
   if (command === "/start") {
     await clearContactKeyboardIfNeeded(chatId, session);
     resetSession(session, argument ? sourceLabel(argument) : session.source);
+    const normalizedArgument = argument.toLowerCase();
 
-    if (argument.toLowerCase().startsWith("complex")) {
+    if (normalizedArgument.startsWith("complex_2")) {
+      session.kind = "complex";
+      await showChannelOffer(chatId);
+    } else if (normalizedArgument.startsWith("complex")) {
       await startComplex(chatId, session);
     } else {
       await showMain(chatId, session);

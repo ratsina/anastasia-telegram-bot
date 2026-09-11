@@ -470,3 +470,52 @@ test("delivers both complexes after a confirmed channel subscription", async () 
   assert.ok(telegramMessages.some(({ body }) => body.text.includes("Комплекс №2")));
   assert.ok(telegramMessages.some(({ body }) => body.text.includes("Спасибо за подписку")));
 });
+
+test("opens the second-complex offer from an Instagram deep link", async () => {
+  resetStateForTest();
+  const requests = [];
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = async (url, options) => {
+    requests.push({
+      method: String(url).split("/").at(-1),
+      body: JSON.parse(options.body),
+    });
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ ok: true, result: {} }),
+    };
+  };
+
+  try {
+    await handleUpdateForTest({
+      message: {
+        message_id: 1,
+        chat: { id: 304, type: "private" },
+        from: { id: 304, username: "instagram_client", first_name: "Клиент" },
+        text: "/start complex_2_instagram",
+      },
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  const telegramMessages = requests.filter(({ method }) => method === "sendMessage");
+  assert.equal(
+    telegramMessages.some(({ body }) => body.text.includes("Комплекс №1")),
+    false,
+  );
+  assert.ok(
+    telegramMessages.some(({ body }) =>
+      body.text.includes("Комплекс №2 для шеи"),
+    ),
+  );
+  assert.ok(
+    telegramMessages.some(({ body }) =>
+      body.reply_markup.inline_keyboard.flat().some(
+        ({ callback_data }) => callback_data === "complex_2_check",
+      ),
+    ),
+  );
+});

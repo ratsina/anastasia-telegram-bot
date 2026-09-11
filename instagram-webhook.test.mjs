@@ -5,11 +5,17 @@ import { once } from "node:events";
 
 import {
   INSTAGRAM_CONFIRM_COMPLEX_PAYLOAD,
+  INSTAGRAM_COMPLEX_1_TEXT,
+  INSTAGRAM_COMPLEX_2_HANDOFF_TEXT,
+  INSTAGRAM_COMPLEX_2_QUICK_REPLY,
+  INSTAGRAM_COMPLEX_MENU_QUICK_REPLIES,
   INSTAGRAM_DECLINE_COMPLEX_PAYLOAD,
+  INSTAGRAM_GET_COMPLEX_1_PAYLOAD,
+  INSTAGRAM_GET_COMPLEX_2_PAYLOAD,
   INSTAGRAM_REPLY_TEXT,
   INSTAGRAM_TYPO_CONFIRMATION_TEXT,
   INSTAGRAM_TYPO_QUICK_REPLIES,
-  TELEGRAM_COMPLEX_URL,
+  TELEGRAM_COMPLEX_2_URL,
   classifyInstagramKeyword,
   createInstagramSender,
   createInstagramWebhookServer,
@@ -36,14 +42,14 @@ test("normalizes all supported keyword spellings", () => {
   assert.equal(normalizeInstagramKeyword("ДВИЖЕНИЕ!!! 🙌🤍"), "движение");
 });
 
-test("sends users to the Telegram complex flow", () => {
+test("hands off only the second complex to Telegram", () => {
   assert.equal(
-    TELEGRAM_COMPLEX_URL,
-    "https://t.me/anastasia_lfk_massage_bot?start=complex_instagram",
+    TELEGRAM_COMPLEX_2_URL,
+    "https://t.me/anastasia_lfk_massage_bot?start=complex_2_instagram",
   );
-  assert.match(INSTAGRAM_REPLY_TEXT, /получить комплекс №1/);
-  assert.ok(INSTAGRAM_REPLY_TEXT.includes(TELEGRAM_COMPLEX_URL));
-  assert.equal(INSTAGRAM_REPLY_TEXT.includes("[ССЫЛКА НА КОМПЛЕКС №1]"), false);
+  assert.equal(INSTAGRAM_REPLY_TEXT.includes(TELEGRAM_COMPLEX_2_URL), false);
+  assert.ok(INSTAGRAM_COMPLEX_2_HANDOFF_TEXT.includes(TELEGRAM_COMPLEX_2_URL));
+  assert.match(INSTAGRAM_COMPLEX_1_TEXT, /Комплекс упражнений №1/);
 });
 
 test("classifies only the exact keyword and one-edit typos", () => {
@@ -162,7 +168,11 @@ test("accepts a signed POST webhook and rejects an invalid signature", async (t)
   assert.equal(valid.status, 200);
   assert.equal(await valid.text(), "EVENT_RECEIVED");
   await waitFor(() => sent.length === 1);
-  assert.deepEqual(sent[0], ["9001", INSTAGRAM_REPLY_TEXT]);
+  assert.deepEqual(sent[0], [
+    "9001",
+    INSTAGRAM_REPLY_TEXT,
+    { quickReplies: INSTAGRAM_COMPLEX_MENU_QUICK_REPLIES },
+  ]);
 
   const invalid = await fetch(`${baseUrl}/webhook`, {
     method: "POST",
@@ -207,6 +217,12 @@ test("matches keyword variants, ignores echoes and deduplicates message IDs", as
   assert.equal(result.ignored, 4);
   assert.equal(sent.length, 3);
   assert.ok(sent.every(([, text]) => text === INSTAGRAM_REPLY_TEXT));
+  assert.ok(
+    sent.every(
+      ([, , options]) =>
+        options.quickReplies === INSTAGRAM_COMPLEX_MENU_QUICK_REPLIES,
+    ),
+  );
   assert.equal(logs.join("\n").includes(TEST_CONFIG.appSecret), false);
   assert.equal(logs.join("\n").includes(TEST_CONFIG.accessToken), false);
 });
@@ -270,7 +286,51 @@ test("asks for confirmation on a close typo and handles both quick replies", asy
       INSTAGRAM_TYPO_CONFIRMATION_TEXT,
       { quickReplies: INSTAGRAM_TYPO_QUICK_REPLIES },
     ],
-    ["3001", INSTAGRAM_REPLY_TEXT],
+    [
+      "3001",
+      INSTAGRAM_REPLY_TEXT,
+      { quickReplies: INSTAGRAM_COMPLEX_MENU_QUICK_REPLIES },
+    ],
+  ]);
+});
+
+test("delivers complex one in Instagram before handing complex two to Telegram", async () => {
+  const sent = [];
+  const payload = instagramPayload([
+    incomingMessage({ mid: "keyword-1", senderId: "4001", text: "ДВИЖЕНИЕ" }),
+    incomingMessage({
+      mid: "complex-1",
+      senderId: "4001",
+      text: "▶️ Комплекс №1",
+      quickReplyPayload: INSTAGRAM_GET_COMPLEX_1_PAYLOAD,
+    }),
+    incomingMessage({
+      mid: "complex-2",
+      senderId: "4001",
+      text: "🎁 Получить №2",
+      quickReplyPayload: INSTAGRAM_GET_COMPLEX_2_PAYLOAD,
+    }),
+  ]);
+
+  const result = await processInstagramWebhookPayload(payload, {
+    accountId: TEST_CONFIG.accountId,
+    logger: quietLogger(),
+    sendMessage: async (...args) => sent.push(args),
+  });
+
+  assert.deepEqual(result, { received: 3, replied: 3, ignored: 0 });
+  assert.deepEqual(sent, [
+    [
+      "4001",
+      INSTAGRAM_REPLY_TEXT,
+      { quickReplies: INSTAGRAM_COMPLEX_MENU_QUICK_REPLIES },
+    ],
+    [
+      "4001",
+      INSTAGRAM_COMPLEX_1_TEXT,
+      { quickReplies: INSTAGRAM_COMPLEX_2_QUICK_REPLY },
+    ],
+    ["4001", INSTAGRAM_COMPLEX_2_HANDOFF_TEXT],
   ]);
 });
 

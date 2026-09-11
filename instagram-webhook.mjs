@@ -13,19 +13,50 @@ const MAX_REMEMBERED_MESSAGE_IDS = 5000;
 const INSTAGRAM_KEYWORD = "движение";
 const INSTAGRAM_CONFIRM_COMPLEX_PAYLOAD = "instagram_complex_confirm_yes";
 const INSTAGRAM_DECLINE_COMPLEX_PAYLOAD = "instagram_complex_confirm_no";
+const INSTAGRAM_GET_COMPLEX_1_PAYLOAD = "instagram_get_complex_1";
+const INSTAGRAM_GET_COMPLEX_2_PAYLOAD = "instagram_get_complex_2";
 const TELEGRAM_BOT_USERNAME = (
   process.env.TELEGRAM_BOT_USERNAME?.trim() || "anastasia_lfk_massage_bot"
 ).replace(/^@/, "");
-const TELEGRAM_COMPLEX_URL = `https://t.me/${encodeURIComponent(TELEGRAM_BOT_USERNAME)}?start=complex_instagram`;
+const TELEGRAM_COMPLEX_2_URL = `https://t.me/${encodeURIComponent(TELEGRAM_BOT_USERNAME)}?start=complex_2_instagram`;
+const INSTAGRAM_COMPLEX_1_URL =
+  process.env.INSTAGRAM_COMPLEX_1_URL?.trim() || "[ССЫЛКА НА КОМПЛЕКС №1]";
 
 const INSTAGRAM_REPLY_TEXT = [
   "Привет! 🙌",
   "Вы пришли за комплексом упражнений.",
   "",
-  "Нажмите на ссылку, чтобы получить комплекс №1 и продолжить в Telegram:",
-  "",
-  TELEGRAM_COMPLEX_URL,
+  "Сначала получите комплекс №1 или перейдите к получению комплекса №2:",
 ].join("\n");
+
+const INSTAGRAM_COMPLEX_MENU_QUICK_REPLIES = [
+  {
+    content_type: "text",
+    title: "▶️ Комплекс №1",
+    payload: INSTAGRAM_GET_COMPLEX_1_PAYLOAD,
+  },
+  {
+    content_type: "text",
+    title: "🎁 Получить №2",
+    payload: INSTAGRAM_GET_COMPLEX_2_PAYLOAD,
+  },
+];
+
+const INSTAGRAM_COMPLEX_1_TEXT = [
+  "Комплекс упражнений №1:",
+  "",
+  INSTAGRAM_COMPLEX_1_URL,
+].join("\n");
+
+const INSTAGRAM_COMPLEX_2_HANDOFF_TEXT = [
+  "Чтобы получить комплекс №2, перейдите в Telegram:",
+  "",
+  TELEGRAM_COMPLEX_2_URL,
+].join("\n");
+
+const INSTAGRAM_COMPLEX_2_QUICK_REPLY = [
+  INSTAGRAM_COMPLEX_MENU_QUICK_REPLIES[1],
+];
 
 const INSTAGRAM_TYPO_CONFIRMATION_TEXT =
   "Кажется, вы имели в виду кодовое слово ДВИЖЕНИЕ 😊 Хотите получить бесплатный комплекс упражнений?";
@@ -249,8 +280,28 @@ async function processInstagramWebhookPayload(
 
       const confirmedByQuickReply =
         quickReplyPayload === INSTAGRAM_CONFIRM_COMPLEX_PAYLOAD;
+      let replyText = "";
+      let replyOptions;
+      let replyAction = "";
 
-      if (!confirmedByQuickReply && keywordMatch === "none") {
+      if (quickReplyPayload === INSTAGRAM_GET_COMPLEX_1_PAYLOAD) {
+        replyText = INSTAGRAM_COMPLEX_1_TEXT;
+        replyOptions = { quickReplies: INSTAGRAM_COMPLEX_2_QUICK_REPLY };
+        replyAction = "send_complex_1";
+      } else if (quickReplyPayload === INSTAGRAM_GET_COMPLEX_2_PAYLOAD) {
+        replyText = INSTAGRAM_COMPLEX_2_HANDOFF_TEXT;
+        replyAction = "handoff_complex_2";
+      } else if (keywordMatch === "typo" && !confirmedByQuickReply) {
+        replyText = INSTAGRAM_TYPO_CONFIRMATION_TEXT;
+        replyOptions = { quickReplies: INSTAGRAM_TYPO_QUICK_REPLIES };
+        replyAction = "confirm_typo";
+      } else if (confirmedByQuickReply || keywordMatch === "exact") {
+        replyText = INSTAGRAM_REPLY_TEXT;
+        replyOptions = { quickReplies: INSTAGRAM_COMPLEX_MENU_QUICK_REPLIES };
+        replyAction = "show_complex_options";
+      }
+
+      if (!replyText) {
         result.ignored += 1;
         continue;
       }
@@ -258,16 +309,14 @@ async function processInstagramWebhookPayload(
       rememberMessageId(processedMessageIds, messageId);
 
       try {
-        if (keywordMatch === "typo" && !confirmedByQuickReply) {
-          await sendMessage(senderId, INSTAGRAM_TYPO_CONFIRMATION_TEXT, {
-            quickReplies: INSTAGRAM_TYPO_QUICK_REPLIES,
-          });
+        if (replyOptions) {
+          await sendMessage(senderId, replyText, replyOptions);
         } else {
-          await sendMessage(senderId, INSTAGRAM_REPLY_TEXT);
+          await sendMessage(senderId, replyText);
         }
         result.replied += 1;
         logger.info(
-          `[instagram-webhook] automatic reply sent recipient=${maskIdentifier(senderId)} source_message=${maskIdentifier(messageId)} action=${keywordMatch === "typo" && !confirmedByQuickReply ? "confirm_typo" : "send_complex"}`,
+          `[instagram-webhook] automatic reply sent recipient=${maskIdentifier(senderId)} source_message=${maskIdentifier(messageId)} action=${replyAction}`,
         );
       } catch (error) {
         if (messageId) processedMessageIds.delete(messageId);
@@ -500,11 +549,17 @@ function isDirectRun() {
 
 export {
   INSTAGRAM_CONFIRM_COMPLEX_PAYLOAD,
+  INSTAGRAM_COMPLEX_1_TEXT,
+  INSTAGRAM_COMPLEX_2_HANDOFF_TEXT,
+  INSTAGRAM_COMPLEX_2_QUICK_REPLY,
+  INSTAGRAM_COMPLEX_MENU_QUICK_REPLIES,
   INSTAGRAM_DECLINE_COMPLEX_PAYLOAD,
+  INSTAGRAM_GET_COMPLEX_1_PAYLOAD,
+  INSTAGRAM_GET_COMPLEX_2_PAYLOAD,
   INSTAGRAM_REPLY_TEXT,
   INSTAGRAM_TYPO_CONFIRMATION_TEXT,
   INSTAGRAM_TYPO_QUICK_REPLIES,
-  TELEGRAM_COMPLEX_URL,
+  TELEGRAM_COMPLEX_2_URL,
   classifyInstagramKeyword,
   createInstagramSender,
   createInstagramWebhookServer,
