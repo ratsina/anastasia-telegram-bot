@@ -1,0 +1,10 @@
+.env
+.git
+*.log
+node_modules
+bot.mjs
+bot.test.mjs
+instagram-webhook.test.mjs
+docs
+tools
+*.cmd
