@@ -1,14 +1,12 @@
 {
-  "name": "anastasia-massage-lfk-bots",
+  "name": "anastasia-telegram-bot",
   "version": "1.0.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node instagram-webhook.mjs",
-    "start:instagram": "node instagram-webhook.mjs",
-    "start:telegram": "node bot.mjs",
-    "instagram:account-id": "node tools/instagram-account-id.mjs",
-    "test": "node --test bot.test.mjs instagram-webhook.test.mjs instagram-account-id.test.mjs"
+    "start": "node bot.mjs",
+    "privacy:publish": "node tools/publish-privacy.mjs",
+    "test": "node --test bot.test.mjs"
   },
   "engines": {
     "node": ">=20"

@@ -2,8 +2,6 @@
 
 Бот собирает заявки на массаж и ЛФК, выдаёт два комплекса упражнений, проверяет подписку на канал и отправляет готовые карточки в отдельную Telegram-группу. npm-зависимости не требуются.
 
-В проекте также есть отдельный сервер Instagram Direct webhook. Он отвечает на кодовое слово `ДВИЖЕНИЕ`, выдаёт комплекс №1 и передаёт пользователя в Telegram за комплексом №2. Настройка описана в `docs/instagram-direct.md`.
-
 ## Запуск
 
 ```powershell
@@ -58,20 +56,6 @@
 
 ## Источники заявок
 
-Бот сохраняет параметр ссылки `/start`. Например, ссылка вида `https://t.me/ИМЯ_БОТА?start=instagram_reels_15` добавит в карточку источник `instagram reels 15`. Параметр, начинающийся с `complex`, сразу открывает ветку бесплатного комплекса.
+Бот сохраняет параметр ссылки `/start`. Например, ссылка вида `https://t.me/ИМЯ_БОТА?start=instagram_reels_15` добавит в карточку источник `instagram reels 15`. Параметр, начинающийся с `complex`, открывает ветку комплексов; `complex_2` сразу открывает получение комплекса №2.
 
-## Instagram Direct
-
-Запуск отдельного webhook-сервера:
-
-```powershell
-.\start-instagram-webhook.cmd
-```
-
-Для Meta используется callback path `/webhook`, а для проверки доступности — `/health`. Сервер проверяет `X-Hub-Signature-256`, не отвечает на собственные echo-сообщения и не выводит секреты в журнал. Подробная инструкция находится в `docs/instagram-direct.md`.
-
-Для развёртывания на Render используйте готовый `render.yaml` или точные значения полей из `docs/render-deploy.md`. ID профессионального Instagram-аккаунта можно получить без вывода токена командой:
-
-```powershell
-npm run instagram:account-id
-```
+Instagram Direct webhook находится в отдельном репозитории: [ratsina/anastasia-instagram-bot](https://github.com/ratsina/anastasia-instagram-bot).

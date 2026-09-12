@@ -1,10 +1,8 @@
 FROM node:22-alpine
 
 WORKDIR /app
-COPY package.json instagram-webhook.mjs ./
+COPY package.json bot.mjs settings.env ./
 
 ENV NODE_ENV=production
-ENV PORT=3001
-EXPOSE 3001
 
-CMD ["node", "instagram-webhook.mjs"]
+CMD ["node", "bot.mjs"]
